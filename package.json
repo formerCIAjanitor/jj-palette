@@ -1,0 +1,180 @@
+{
+  "name": "jj-palette",
+  "displayName": "JJ Palette Commands",
+  "description": "Jujutsu commands in the Command Palette: describe, commit, diff, edit and user-defined commands.",
+  "version": "0.2.1",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "SCM Providers"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCommand:jjPalette.describe",
+    "onCommand:jjPalette.commit",
+    "onCommand:jjPalette.diff",
+    "onCommand:jjPalette.edit",
+    "onCommand:jjPalette.custom",
+    "onCommand:jjPalette.addCustom",
+    "onCommand:jjPalette.diagnose"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "jjPalette.describe",
+        "title": "jj describe"
+      },
+      {
+        "command": "jjPalette.commit",
+        "title": "jj commit"
+      },
+      {
+        "command": "jjPalette.diff",
+        "title": "jj diff"
+      },
+      {
+        "command": "jjPalette.edit",
+        "title": "jj edit"
+      },
+      {
+        "command": "jjPalette.custom",
+        "title": "jj custom..."
+      },
+      {
+        "command": "jjPalette.addCustom",
+        "title": "jj add custom command..."
+      },
+      {
+        "command": "jjPalette.diagnose",
+        "title": "jj diagnose"
+      }
+    ],
+    "configuration": {
+      "title": "JJ Palette Commands",
+      "properties": {
+        "jjPalette.editor": {
+          "type": "string",
+          "default": "code --wait",
+          "description": "Value of JJ_EDITOR for commands that open a message editor (describe, commit, and custom commands with mode \"editor\"). Must block until the message tab is closed (e.g. 'code --wait', 'code-insiders --wait', 'codium --wait'). Empty string keeps the editor from the jj config / environment."
+        },
+        "jjPalette.jjPath": {
+          "type": "string",
+          "default": "jj",
+          "description": "Path to the jj executable."
+        },
+        "jjPalette.diffArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "--git"
+          ],
+          "description": "Arguments appended to 'jj diff'. '--git' produces a unified diff that is syntax-highlighted in the editor tab. Examples: [\"--git\", \"-r\", \"@-\"], [\"--stat\"]."
+        },
+        "jjPalette.changeRevset": {
+          "type": "string",
+          "default": "ancestors(visible_heads(), 50) ~ root()",
+          "description": "Revset listing the changes offered by 'jj edit' and by ${revision} in custom commands."
+        },
+        "jjPalette.customCommands": {
+          "type": "array",
+          "default": [],
+          "description": "Custom jj commands. Commands in the user settings also get their own Command Palette entry (\"jj <name>\") after a window reload. The picker \"jj custom...\" lists commands from user, workspace and folder settings; a later scope replaces an entry of the same name. Add entries here or with \"jj add custom command...\".",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "args"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name shown in the picker. Also usable as the argument of a keybinding."
+              },
+              "args": {
+                "description": "Arguments passed to jj, as a string (\"log -r @- --limit 5\") or an array ([\"log\", \"-r\", \"@-\"]). A leading \"jj\" is ignored. ${revision} opens a change picker; ${input} asks for a value.",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "default": "auto",
+                "enum": [
+                  "auto",
+                  "document",
+                  "editor",
+                  "terminal"
+                ],
+                "enumDescriptions": [
+                  "Run in the background. Short output is shown as a notification, long output in an editor tab.",
+                  "Run in the background. Output always opens in an editor tab.",
+                  "Run as a task with JJ_EDITOR set, so jj opens its message editor as a VS Code tab (like describe and commit).",
+                  "Run visibly in the terminal panel. Use for interactive commands."
+                ],
+                "description": "How the command runs."
+              },
+              "language": {
+                "type": "string",
+                "description": "Language id for the output tab in modes \"auto\" and \"document\" (for example \"diff\"). Default: plain text."
+              }
+            }
+          },
+          "examples": [
+            [
+              {
+                "name": "log recent",
+                "args": "log --limit 10",
+                "mode": "document"
+              },
+              {
+                "name": "show change",
+                "args": "show --git ${revision}",
+                "mode": "document",
+                "language": "diff"
+              },
+              {
+                "name": "abandon",
+                "args": "abandon ${revision}"
+              }
+            ]
+          ]
+        },
+        "jjPalette.adhocMode": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "document",
+            "terminal"
+          ],
+          "description": "How 'jj custom...' > 'Run with arguments...' shows its result."
+        },
+        "jjPalette.timeoutSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 1,
+          "description": "Time limit for background jj commands (diff, edit, custom commands in modes \"auto\" and \"document\")."
+        },
+        "jjPalette.refreshJjx": {
+          "type": "boolean",
+          "default": true,
+          "description": "After a command finishes, ask the Jujutsu X extension (if installed) to refresh its graph."
+        }
+      }
+    }
+  }
+}
