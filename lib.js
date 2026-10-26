@@ -251,7 +251,60 @@ function applyPaletteCommands(manifest, desired) {
   return { changed: true, manifest: next };
 }
 
+// ---------------------------------------------------------------------------
+// Split diff helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse `jj diff --summary`. Lines look like "M path", "A path", "D path", "R {old => new}",
+ * "R dir/{a => b}/file". Returns [{ status, path, oldPath? }] where path is the path in the
+ * working copy (for deleted files: the path that was deleted) and oldPath is the source of a
+ * rename or copy.
+ */
+function parseSummary(stdout) {
+  const entries = [];
+  for (const line of stdout.split('\n')) {
+    const m = /^([MADRC]) (.+)$/.exec(line);
+    if (!m) {
+      continue;
+    }
+    const status = m[1];
+    const rest = m[2];
+    if (status === 'R' || status === 'C') {
+      const clean = (p) => p.replace(/\/{2,}/g, '/');
+      const b = /^(.*?)\{(.*?) => (.*?)\}(.*)$/.exec(rest);
+      if (b) {
+        entries.push({ status, oldPath: clean(b[1] + b[2] + b[4]), path: clean(b[1] + b[3] + b[4]) });
+      } else {
+        const i = rest.indexOf(' => ');
+        entries.push(
+          i < 0 ? { status, path: rest } : { status, oldPath: rest.slice(0, i), path: rest.slice(i + 4) }
+        );
+      }
+    } else {
+      entries.push({ status, path: rest });
+    }
+  }
+  return entries;
+}
+
+/** A fileset expression that names exactly this workspace-root-relative file. */
+function rootFileset(filePath) {
+  return 'root-file:"' + String(filePath).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+}
+
+/** Label for a changed file in the picker. */
+function describeEntry(entry) {
+  if (entry.oldPath && entry.oldPath !== entry.path) {
+    return entry.status + ' ' + entry.oldPath + ' → ' + entry.path;
+  }
+  return entry.status + ' ' + entry.path;
+}
+
 module.exports = {
+  parseSummary,
+  rootFileset,
+  describeEntry,
   shellFamily,
   quoteShellArg,
   PALETTE_PREFIX,

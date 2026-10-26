@@ -5,7 +5,7 @@
 | Entry | Action |
 | --- | --- |
 | `jj describe`, `jj commit` | Run the command; the message opens as an editor tab (`JJ_EDITOR=code --wait`), like `git commit`. |
-| `jj diff` | Open `jj diff --git` of the working copy in a diff-highlighted tab. |
+| `jj diff` | Open the working-copy changes in VS Code's split diff editor. Several files: picker with `All changes` (multi-file editor) and one entry per file. |
 | `jj edit` | Pick a change from a searchable list and run `jj edit` on it. |
 | `jj <name>` | One entry per custom command in the user settings. |
 | `jj custom...` | Picker over all custom commands, plus one-off arguments. |
@@ -54,7 +54,8 @@ VS Code reads palette titles from the manifest only, so entries for user-level c
 | --- | --- |
 | `jjPalette.editor` | `code --wait` (`JJ_EDITOR` for editor modes; must block until the tab closes) |
 | `jjPalette.jjPath` | `jj` |
-| `jjPalette.diffArgs` | `["--git"]` |
+| `jjPalette.diffMode` | `split` (`split`, or `text` for a diff-highlighted tab; merge changes always use `text`) |
+| `jjPalette.diffArgs` | `["--git"]` (`text` mode only) |
 | `jjPalette.changeRevset` | `ancestors(visible_heads(), 50) ~ root()` (change picker) |
 | `jjPalette.customCommands` | `[]` |
 | `jjPalette.adhocMode` | `auto` (`auto`, `document`, `terminal`) |

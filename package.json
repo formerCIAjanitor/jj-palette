@@ -2,7 +2,7 @@
   "name": "jj-palette",
   "displayName": "JJ Palette Commands",
   "description": "Jujutsu commands in the Command Palette: describe, commit, diff, edit and user-defined commands.",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "publisher": "local",
   "license": "MIT",
   "engines": {
@@ -65,6 +65,19 @@
           "default": "jj",
           "description": "Path to the jj executable."
         },
+        "jjPalette.diffMode": {
+          "type": "string",
+          "default": "split",
+          "enum": [
+            "split",
+            "text"
+          ],
+          "enumDescriptions": [
+            "Open the change in the VS Code diff editor: the file in the parent change next to the working-copy file. Several changed files: a picker, with an \"All changes\" entry for the multi-file view.",
+            "Open the output of \"jj diff\" in an editor tab (see jjPalette.diffArgs)."
+          ],
+          "description": "How \"jj diff\" shows the working-copy change."
+        },
         "jjPalette.diffArgs": {
           "type": "array",
           "items": {
@@ -73,7 +86,7 @@
           "default": [
             "--git"
           ],
-          "description": "Arguments appended to 'jj diff'. '--git' produces a unified diff that is syntax-highlighted in the editor tab. Examples: [\"--git\", \"-r\", \"@-\"], [\"--stat\"]."
+          "description": "Arguments appended to \"jj diff\" in mode \"text\". \"--git\" produces a unified diff that is syntax-highlighted in the editor tab. Examples: [\"--git\", \"-r\", \"@-\"], [\"--stat\"]."
         },
         "jjPalette.changeRevset": {
           "type": "string",

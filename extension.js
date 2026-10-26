@@ -315,9 +315,126 @@ async function cmdBuiltin(key) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// jj diff in VS Code's split diff editor
+//
+// Left side: the file as it is in the parent change (@-), served by a virtual document provider
+// that runs `jj file show`. Right side: the real file in the working copy, which stays editable.
+// ---------------------------------------------------------------------------
+
+const BASE_SCHEME = 'jj-palette-base';
+
+function baseUri(root, rev, relPath) {
+  return vscode.Uri.from({ scheme: BASE_SCHEME, path: '/' + relPath, query: JSON.stringify({ root, rev }) });
+}
+
+function emptyUri(relPath) {
+  return vscode.Uri.from({ scheme: BASE_SCHEME, path: '/' + relPath, query: JSON.stringify({ empty: true }) });
+}
+
+const baseContentProvider = {
+  async provideTextDocumentContent(uri) {
+    let q;
+    try {
+      q = JSON.parse(uri.query);
+    } catch (err) {
+      return '';
+    }
+    if (q.empty) {
+      return '';
+    }
+    const relPath = uri.path.replace(/^\//, ''); // uri.path is already decoded
+    const res = await execJj({ uri: vscode.Uri.file(q.root) }, ['file', 'show', '-r', q.rev, lib.rootFileset(relPath)]);
+    if (res.code !== 0) {
+      return '(could not read ' + relPath + ' at ' + q.rev + ')\n' + res.stderr;
+    }
+    return res.stdout.includes('\u0000') ? '(binary file)' : res.stdout;
+  },
+};
+
+function fileDiffUris(root, baseRev, entry) {
+  const left = entry.status === 'A' ? emptyUri(entry.path) : baseUri(root, baseRev, entry.oldPath || entry.path);
+  const right = entry.status === 'D' ? emptyUri(entry.path) : vscode.Uri.file(path.join(root, entry.path));
+  return { left, right };
+}
+
+function diffTitle(entry) {
+  const name = entry.oldPath && entry.oldPath !== entry.path ? entry.oldPath + ' → ' + entry.path : entry.path;
+  return name + ' (parent ↔ working copy)';
+}
+
+/**
+ * Open the working-copy change in VS Code's diff editor.
+ * Returns false if the text diff should be used instead (the change has several parents).
+ */
+async function openSplitDiff(folder) {
+  const rootRes = await execJj(folder, ['workspace', 'root']);
+  if (rootRes.code !== 0) {
+    await present('diff', rootRes, 'document');
+    return true;
+  }
+  const root = rootRes.stdout.trim();
+  const rootFolder = { uri: vscode.Uri.file(root) };
+
+  const sumRes = await execJj(rootFolder, ['diff', '--summary']);
+  if (sumRes.code !== 0) {
+    await present('diff', sumRes, 'document');
+    return true;
+  }
+  const entries = lib.parseSummary(sumRes.stdout);
+  if (entries.length === 0) {
+    vscode.window.showInformationMessage('jj diff: the working-copy change has no modifications.');
+    return true;
+  }
+
+  const parentRes = await execJj(rootFolder, ['log', '--no-graph', '-r', '@-', '-T', 'commit_id ++ "\\n"']);
+  const parents = parentRes.code === 0 ? parentRes.stdout.split('\n').filter((l) => l.trim() !== '') : [];
+  if (parents.length !== 1) {
+    log.appendLine('diff: the working-copy change has ' + parents.length + ' parents; using the text diff');
+    return false;
+  }
+  const baseRev = parents[0].trim();
+
+  const openOne = (entry) => {
+    const { left, right } = fileDiffUris(root, baseRev, entry);
+    return vscode.commands.executeCommand('vscode.diff', left, right, diffTitle(entry), { preview: true });
+  };
+
+  if (entries.length === 1) {
+    await openOne(entries[0]);
+    return true;
+  }
+
+  const ALL = { label: '$(files) All changes (' + entries.length + ' files)', alwaysShow: true, all: true };
+  const items = [ALL, ...entries.map((e) => ({ label: lib.describeEntry(e), entry: e }))];
+  const picked = await vscode.window.showQuickPick(items, {
+    placeHolder: 'jj diff: select a file to compare with its parent',
+  });
+  if (!picked) {
+    return true;
+  }
+  if (picked.all) {
+    const resources = entries.map((e) => {
+      const { left, right } = fileDiffUris(root, baseRev, e);
+      return [e.status === 'D' ? left : right, left, right];
+    });
+    try {
+      await vscode.commands.executeCommand('vscode.changes', 'jj diff: working copy vs parent', resources);
+    } catch (err) {
+      vscode.window.showErrorMessage('jj diff: the multi-file diff editor could not be opened (' + err + ').');
+    }
+    return true;
+  }
+  await openOne(picked.entry);
+  return true;
+}
+
 async function cmdDiff() {
   const folder = await pickFolder();
   if (!folder) {
+    return;
+  }
+  if ((cfg().get('diffMode') || 'split') === 'split' && (await openSplitDiff(folder))) {
     return;
   }
   const extra = cfg().get('diffArgs');
@@ -615,7 +732,8 @@ function activate(context) {
     vscode.commands.registerCommand('jjPalette.edit', cmdEdit),
     vscode.commands.registerCommand('jjPalette.custom', cmdCustom),
     vscode.commands.registerCommand('jjPalette.addCustom', cmdAddCustom),
-    vscode.commands.registerCommand('jjPalette.diagnose', () => cmdDiagnose(context))
+    vscode.commands.registerCommand('jjPalette.diagnose', () => cmdDiagnose(context)),
+    vscode.workspace.registerTextDocumentContentProvider(BASE_SCHEME, baseContentProvider)
   );
   log.appendLine(
     'JJ Palette ' + (context.extension && context.extension.packageJSON ? context.extension.packageJSON.version : '?') +
