@@ -85,7 +85,9 @@ function execJj(folder, args) {
 async function runTask(folder, label, args, { withEditor, visible }) {
   const c = cfg();
   const jjPath = c.get('jjPath') || 'jj';
-  const env = {};
+  // Tasks write to a terminal that closes or stays open on its own; a pager would wait for 'q'.
+  // JJ_PAGER is inherited by jj processes started from custom commands (e.g. via `jj util exec`).
+  const env = { JJ_PAGER: 'cat' };
   const editor = c.get('editor');
   if (withEditor && editor) {
     env.JJ_EDITOR = editor;
