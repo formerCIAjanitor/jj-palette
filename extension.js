@@ -90,14 +90,20 @@ async function runTask(folder, label, args, { withEditor, visible }) {
   if (withEditor && editor) {
     env.JJ_EDITOR = editor;
   }
-  log.appendLine('task: ' + jjPath + ' ' + args.join(' ') + (env.JJ_EDITOR ? '   (JJ_EDITOR=' + env.JJ_EDITOR + ')' : ''));
+  // Quote for the shell that runs the task; see lib.quoteShellArg.
+  const family = lib.shellFamily(vscode.env.shell);
+  const quotedArgs = args.map((a) => lib.quoteShellArg(a, family));
+  log.appendLine(
+    'task: ' + jjPath + ' ' + quotedArgs.join(' ') + '   (shell: ' + (vscode.env.shell || 'default') + ')' +
+      (env.JJ_EDITOR ? '   (JJ_EDITOR=' + env.JJ_EDITOR + ')' : '')
+  );
 
   const task = new vscode.Task(
     { type: 'shell', jjPalette: label },
     folder,
     'jj ' + label,
     'jj-palette',
-    new vscode.ShellExecution(jjPath, args, { cwd: folder.uri.fsPath, env }),
+    new vscode.ShellExecution(jjPath, quotedArgs, { cwd: folder.uri.fsPath, env }),
     []
   );
   task.presentationOptions = visible

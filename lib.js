@@ -136,6 +136,48 @@ function displayArgs(args) {
 }
 
 // ---------------------------------------------------------------------------
+// Shell quoting for task arguments
+//
+// VS Code wraps a plain task argument that contains a space in quotes WITHOUT escaping quotes that are
+// already inside it, so an argument such as  jj bookmark set -r 'latest(::@)'  reaches the shell broken.
+// An argument that already starts and ends with the shell's quote character is passed through unchanged,
+// so arguments are quoted here, for the shell that runs the task.
+// ---------------------------------------------------------------------------
+
+/** "posix" (bash, zsh, sh, dash, fish, ...), "powershell" or "cmd", from the path of the shell. */
+function shellFamily(shellPath) {
+  const base = String(shellPath || '')
+    .split(/[\\/]/)
+    .pop()
+    .toLowerCase()
+    .replace(/\.exe$/, '');
+  if (base === 'pwsh' || base === 'powershell') {
+    return 'powershell';
+  }
+  if (base === 'cmd') {
+    return 'cmd';
+  }
+  return 'posix';
+}
+
+const SAFE_ARG = /^[A-Za-z0-9_@%+=:,./-]+$/;
+
+/** Quote one argument so the given shell passes it to the program unchanged. */
+function quoteShellArg(arg, family) {
+  const s = String(arg);
+  if (SAFE_ARG.test(s)) {
+    return s;
+  }
+  if (family === 'powershell') {
+    return "'" + s.replace(/'/g, "''") + "'";
+  }
+  if (family === 'cmd') {
+    return '"' + s.replace(/"/g, '\\"') + '"';
+  }
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+// ---------------------------------------------------------------------------
 // Generated Command Palette entries for custom commands
 // ---------------------------------------------------------------------------
 
@@ -210,6 +252,8 @@ function applyPaletteCommands(manifest, desired) {
 }
 
 module.exports = {
+  shellFamily,
+  quoteShellArg,
   PALETTE_PREFIX,
   commandIds,
   paletteCommands,

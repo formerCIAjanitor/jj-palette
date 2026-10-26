@@ -2,7 +2,7 @@
   "name": "jj-palette",
   "displayName": "JJ Palette Commands",
   "description": "Jujutsu commands in the Command Palette: describe, commit, diff, edit and user-defined commands.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "local",
   "license": "MIT",
   "engines": {
