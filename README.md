@@ -99,6 +99,14 @@ Either edit the setting directly, or run `jj add custom command...` from the pal
 The wizard asks for a name, the arguments, and the mode, then appends the entry to the user settings.
 Entries from user, workspace, and folder settings are combined; an entry in a narrower scope replaces an entry of the same name.
 
+### Quoting
+
+In modes `editor` and `terminal` the command runs through the shell VS Code uses for tasks (`vscode.env.shell`).
+Each argument is quoted for that shell, so quotes, parentheses, `&&`, `$`, and spaces inside an argument reach `jj` unchanged.
+This matters for arguments such as the `sh -c '...'` script above.
+Quoting is implemented for POSIX shells (bash, zsh, sh, dash, fish), PowerShell, and cmd.
+In modes `auto` and `document` no shell is involved and arguments are passed as they are.
+
 ### Direct palette entries
 
 Each custom command in the **user** settings gets its own Command Palette entry titled `jj <name>`, so `jj pm` is one step: open the palette, type, Enter.
@@ -143,7 +151,7 @@ npx @vscode/vsce package --allow-missing-repository --no-dependencies
 Run the unit tests for the helper functions:
 
 ```
-node --test test/lib.test.js
+node --test test/lib.test.js test/shell.test.js
 ```
 
 Run without packaging:
@@ -160,12 +168,19 @@ code --extensionDevelopmentPath=/path/to/jj-palette
 | `extension.js` | Command handlers, process and task handling, pickers. |
 | `lib.js` | Pure helpers (argument parsing, placeholders, output parsing). No `vscode` import. |
 | `test/lib.test.js` | Unit tests for `lib.js`. |
+| `test/shell.test.js` | Runs quoted task command lines through the installed shells (sh, bash, dash, zsh) and reproduces the unquoted failure. |
 | `.gitignore` | Excludes tests and build artifacts from the packaged extension. |
 | `LICENSE` | MIT license text. |
+
+## Verification
+
+The helper functions have unit tests.
+The command flows (diff, edit, custom commands, wizard, editor mode with `JJ_EDITOR`, generated palette entries and manifest rewriting, error cases) were additionally run with the real `extension.js` against a mocked `vscode` API and a real jj 0.45.1 repository.
 
 ## Limitations
 
 - Palette entries for custom commands appear only after a window reload, and only for commands in the user settings.
+- Argument quoting follows `vscode.env.shell`. If tasks run in a different shell (for example through `terminal.integrated.automationProfile`), quoting can mismatch.
 - `jj diff` shows the working-copy change unless `jjPalette.diffArgs` selects another revision.
 - `jj split`, `jj squash -i` and other commands that open an interactive diff editor need a terminal; define them in mode `terminal`.
 
