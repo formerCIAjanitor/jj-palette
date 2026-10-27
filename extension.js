@@ -115,7 +115,7 @@ async function runTask(folder, label, args, { withEditor, visible }) {
         echo: true,
         clear: false,
         close: false,
-        showReuseMessage: false,
+        showReuseMessage: true,
         panel: vscode.TaskPanelKind.Dedicated,
       }
     : {
