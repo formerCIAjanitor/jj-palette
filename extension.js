@@ -81,8 +81,8 @@ function execJj(folder, args) {
   });
 }
 
-/** Run jj as a VS Code task, so interactive editors and terminal programs work. */
-async function runTask(folder, label, args, { withEditor, visible }) {
+/** Run jj as a hidden VS Code task, so that jj can open its message editor as a VS Code tab. */
+async function runTask(folder, label, args, { withEditor }) {
   const c = cfg();
   const jjPath = c.get('jjPath') || 'jj';
   // Tasks write to a terminal that closes or stays open on its own; a pager would wait for 'q'.
@@ -108,25 +108,15 @@ async function runTask(folder, label, args, { withEditor, visible }) {
     new vscode.ShellExecution(jjPath, quotedArgs, { cwd: folder.uri.fsPath, env }),
     []
   );
-  task.presentationOptions = visible
-    ? {
-        reveal: vscode.TaskRevealKind.Always,
-        focus: true,
-        echo: true,
-        clear: false,
-        close: false,
-        showReuseMessage: true,
-        panel: vscode.TaskPanelKind.Dedicated,
-      }
-    : {
-        reveal: vscode.TaskRevealKind.Silent,
-        focus: false,
-        echo: false,
-        clear: false,
-        close: true,
-        showReuseMessage: false,
-        panel: vscode.TaskPanelKind.Dedicated,
-      };
+  task.presentationOptions = {
+    reveal: vscode.TaskRevealKind.Silent,
+    focus: false,
+    echo: false,
+    clear: false,
+    close: true,
+    showReuseMessage: false,
+    panel: vscode.TaskPanelKind.Dedicated,
+  };
 
   const listener = vscode.tasks.onDidEndTaskProcess((e) => {
     if (e.execution.task.source === 'jj-palette' && e.execution.task.name === task.name) {
@@ -143,6 +133,67 @@ async function runTask(folder, label, args, { withEditor, visible }) {
     listener.dispose();
     vscode.window.showErrorMessage('jj ' + label + ' failed to start: ' + err);
   }
+}
+
+// Integrated terminals for mode "terminal": the command is typed into a normal terminal, one per
+// repository, so it behaves as if run by hand (output stays, the prompt returns).
+const jjTerminals = new Map(); // repository path -> vscode.Terminal
+const pendingRuns = new Map(); // vscode.Terminal -> { label } for commands whose end is tracked
+
+/** Wait until shell integration is active in a new terminal (VS Code 1.93+), at most `ms`. */
+function awaitShellIntegration(term, ms) {
+  if (term.shellIntegration || typeof vscode.window.onDidChangeTerminalShellIntegration !== 'function') {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      listener.dispose();
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    const listener = vscode.window.onDidChangeTerminalShellIntegration((e) => {
+      if (e.terminal === term) {
+        done();
+      }
+    });
+  });
+}
+
+async function runInTerminal(folder, label, args) {
+  const jjPath = cfg().get('jjPath') || 'jj';
+  const family = lib.shellFamily(vscode.env.shell);
+  const quoted = [jjPath, ...args].map((a) => lib.quoteShellArg(a, family)).join(' ');
+  const line = family === 'powershell' ? '& ' + quoted : quoted;
+  log.appendLine('terminal: ' + line + '   (shell: ' + (vscode.env.shell || 'default') + ')');
+
+  const key = folder.uri.fsPath;
+  let term = jjTerminals.get(key);
+  if (!term || term.exitStatus !== undefined) {
+    term = vscode.window.createTerminal({ name: 'jj', cwd: key });
+    jjTerminals.set(key, term);
+    await awaitShellIntegration(term, 2000);
+  }
+  term.show(false);
+  if (term.shellIntegration) {
+    pendingRuns.set(term, { label });
+    term.shellIntegration.executeCommand(line);
+  } else {
+    term.sendText(line, true); // no exit code available without shell integration
+  }
+}
+
+/** Exit code and graph refresh for commands started by runInTerminal (needs shell integration). */
+function onTerminalCommandEnd(e) {
+  const run = pendingRuns.get(e.terminal);
+  if (!run) {
+    return;
+  }
+  pendingRuns.delete(e.terminal);
+  if (e.exitCode !== undefined && e.exitCode !== 0) {
+    vscode.window.showWarningMessage('jj ' + run.label + ' exited with code ' + e.exitCode + '.');
+  }
+  refreshJjx();
 }
 
 /** Ask the Jujutsu X extension (if installed) to refresh its graph. */
@@ -294,9 +345,9 @@ async function runSpec(folder, spec) {
 
   const mode = spec.mode || 'auto';
   if (mode === 'editor') {
-    await runTask(folder, spec.name, args, { withEditor: true, visible: false });
+    await runTask(folder, spec.name, args, { withEditor: true });
   } else if (mode === 'terminal') {
-    await runTask(folder, spec.name, args, { withEditor: false, visible: true });
+    await runInTerminal(folder, spec.name, args);
   } else {
     const res = await execJj(folder, args);
     const ok = await present(spec.name, res, mode, spec.language);
@@ -735,8 +786,19 @@ function activate(context) {
     vscode.commands.registerCommand('jjPalette.custom', cmdCustom),
     vscode.commands.registerCommand('jjPalette.addCustom', cmdAddCustom),
     vscode.commands.registerCommand('jjPalette.diagnose', () => cmdDiagnose(context)),
-    vscode.workspace.registerTextDocumentContentProvider(BASE_SCHEME, baseContentProvider)
+    vscode.workspace.registerTextDocumentContentProvider(BASE_SCHEME, baseContentProvider),
+    vscode.window.onDidCloseTerminal((t) => {
+      pendingRuns.delete(t);
+      for (const [key, term] of jjTerminals) {
+        if (term === t) {
+          jjTerminals.delete(key);
+        }
+      }
+    })
   );
+  if (typeof vscode.window.onDidEndTerminalShellExecution === 'function') {
+    context.subscriptions.push(vscode.window.onDidEndTerminalShellExecution(onTerminalCommandEnd));
+  }
   log.appendLine(
     'JJ Palette ' + (context.extension && context.extension.packageJSON ? context.extension.packageJSON.version : '?') +
       ' activated (' + context.extensionPath + ')'

@@ -33,7 +33,7 @@ Requires VS Code 1.80+ and `jj` (tested with 0.45.1) on the `PATH` seen by VS Co
   - `auto` (default): background; short output as notification, long output in a tab.
   - `document`: background; output always in a tab (`language` sets its language id).
   - `editor`: task with `JJ_EDITOR` set, for commands that open a message editor.
-  - `terminal`: visible terminal, for interactive commands such as `git push`.
+  - `terminal`: typed into an integrated terminal (one per repository), as if run by hand. Exit-code warning and graph refresh need shell integration (VS Code 1.93+).
 - Background modes have no terminal and stop after `jjPalette.timeoutSeconds`.
 - In `editor` and `terminal` modes, arguments are quoted for `vscode.env.shell` (POSIX shells, PowerShell, cmd). Other task shells may mismatch.
 - User, workspace and folder entries are merged; narrower scopes win by name.
